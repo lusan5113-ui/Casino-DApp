@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Casino DApp</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f4;}
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        input, button { padding: 10px; margin: 10px; width: 80%; }
+        button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cloud Casino 🎰</h1>
+        <p>Guess a number between 1 and 10</p>
+        <p><strong>Total Pool:</strong> <span id="pool">0</span> ETH</p>
+        
+        <input type="number" id="betNumber" placeholder="Pick a Number (1-10)">
+        <input type="number" id="betAmount" placeholder="Amount in ETH (e.g. 0.01)">
+        <br>
+        <button onclick="placeBet()">Place Bet</button>
+        <p id="status" style="margin-top: 20px; color: #555;"></p>
+    </div>
+
+    <script>
+        // *** 重要：部署后，把你的合约地址填在这里 ***
+        const contractAddress = "YOUR_CONTRACT_ADDRESS_HERE"; 
+        
+        const abi = [
+            { "inputs": [{"internalType": "uint256","name": "_minimumBet","type": "uint256"}], "stateMutability": "nonpayable", "type": "constructor" },
+            { "inputs": [{"internalType": "uint256","name": "numberSelected","type": "uint256"}], "name": "bet", "outputs": [], "stateMutability": "payable", "type": "function" },
+            { "inputs": [], "name": "totalBets", "outputs": [{"internalType": "uint256","name": "","type": "uint256"}], "stateMutability": "view", "type": "function" }
+        ];
+
+        let web3;
+        let contract;
+
+        async function init() {
+            if (typeof window.ethereum !== 'undefined') {
+                web3 = new Web3(window.ethereum);
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' }); // 请求用户授权
+                    contract = new web3.eth.Contract(abi, contractAddress);
+                    updatePool();
+                    document.getElementById("status").innerText = "Connected to Wallet";
+                } catch (error) {
+                    document.getElementById("status").innerText = "User denied account access";
+                }
+            } else {
+                // 如果没有钱包，尝试连接本地/云端节点
+                web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
+                document.getElementById("status").innerText = "Non-Ethereum browser detected. Try installing MetaMask!";
+            }
+        }
+
+        async function placeBet() {
+            const number = document.getElementById("betNumber").value;
+            const amount = document.getElementById("betAmount").value;
+            
+            if(!contract) {
+                document.getElementById("status").innerText = "Contract not loaded.";
+                return;
+            }
+
+            const accounts = await web3.eth.getAccounts();
+            
+            contract.methods.bet(number).send({
+                from: accounts[0],
+                value: web3.utils.toWei(amount, "ether")
+            })
+            .on('transactionHash', function(hash){
+                document.getElementById("status").innerText = "Sending... Hash: " + hash;
+            })
+            .on('receipt', function(receipt){
+                document.getElementById("status").innerText = "Success! You bet on " + number;
+                updatePool();
+            })
+            .on('error', function(error){
+                document.getElementById("status").innerText = "Error: " + error.message;
+            });
+        }
+
+        async function updatePool() {
+            if(!contract) return;
+            try {
+                const total = await contract.methods.totalBets().call();
+                document.getElementById("pool").innerText = web3.utils.fromWei(total, "ether");
+            } catch (e) {
+                console.log("Could not fetch pool", e);
+            }
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
